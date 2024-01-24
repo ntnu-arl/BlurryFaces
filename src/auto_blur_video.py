@@ -30,6 +30,8 @@ def blurBoxes(image, boxes):
         # paste blurred image on the original image
         image[y1:y2, x1:x2] = blur
 
+        # cv2.rectangle(image, (y1, x1), (y2, x2), (0,0,0), -1)
+
     return image
 
 
