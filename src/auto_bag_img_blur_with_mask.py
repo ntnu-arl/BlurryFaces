@@ -44,7 +44,22 @@ def blurBoxes(image, boxes):
 
     return image
 
-
+def getMaskImage(image, boxes):
+  masked_image = np.zeros((image.shape[0], image.shape[1],3), np.uint8)
+  for box in boxes:
+    # unpack each box
+    x1, y1 = box["x1"], box["y1"]
+    x2, y2 = box["x2"], box["y2"]
+    # dy = int(0.2 * (y2 - y1))
+    # dx = int(0.2 * (x2 - x1))
+    # # crop the image due to the current box
+    # y1 = max(0, y1 - dy)
+    # y2 = min(y2 + dy, image.shape[0]-1)
+    # x1 = max(0, x1 - dx)
+    # x2 = min(x2 + dx, image.shape[1]-1)
+    cv2.rectangle(masked_image, (x1, y1), (x2, y2), (255, 255, 255), -1)
+  
+  return masked_image
 # config_file_name = "/home/mihir/post_proc_ws/src/bag_utils/bag_processor/configs/bwt_dataset.yaml"
 
 bag_file_name = "/home/mihir/source_code/BlurryFaces/bags.csv"
@@ -83,20 +98,26 @@ for bag in bag_files:
   in_bag = rosbag.Bag(bag)
   print("Now processing: ", bag)
   filename, file_extension = os.path.splitext(bag)
-  out_bag_name = filename + "_face_blurred" + file_extension
+  out_bag_name = filename + "_face_blurred_with_mask" + file_extension
   out_bag = rosbag.Bag(out_bag_name, 'w')
-  for topic, msg, t in tqdm(in_bag.read_messages(), total=in_bag.get_message_count()):
+  # for topic, msg, t in tqdm(in_bag.read_messages(), total=in_bag.get_message_count()):
+  for topic, msg, t in in_bag.read_messages():
     if topic == img_topic:
       cv_image = bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='passthrough')
       
       faces = detector.detect_objects(cv_image, threshold=threshold)
       # apply blurring
       blur_image = blurBoxes(cv_image, faces)
+      mask_image = getMaskImage(cv_image, faces)
       # cv2.imshow('blured', blur_image)
+      # cv2.imshow('masked', mask_image)
       # key = cv2.waitKey(1)
       img_msg = bridge.cv2_to_imgmsg(blur_image, encoding="passthrough")
       img_msg.header = msg.header
+      mask_img_msg = bridge.cv2_to_imgmsg(mask_image, encoding="passthrough")
+      mask_img_msg.header = msg.header
       out_bag.write("/blackfly_image", img_msg, t)
+      out_bag.write("/blackfly_image_mask", mask_img_msg, t)
     else:
       out_bag.write(topic, msg, t)
   out_bag.close()
