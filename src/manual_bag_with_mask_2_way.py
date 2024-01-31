@@ -9,6 +9,7 @@ key_for = 'd'
 key_back = 'a'
 LINE_UP = '\033[1A'
 LINE_CLEAR = '\x1b[2K'
+MAX_BUFFER = 20
 
 class RosbagPlayer:
     def __init__(self, bag_file):
@@ -21,7 +22,7 @@ class RosbagPlayer:
         self.mask_buffer = []
         self.output_image_buffer = []
         self.output_mask_buffer = []
-        self.max_buffer_length = 20
+        self.max_buffer_length = MAX_BUFFER
         self.absolute_image_counter = 0
         self.absolute_iterator_counter = -1
         self.buffer_index_counter = 0
@@ -58,7 +59,7 @@ class RosbagPlayer:
 
     def process(self):
         filename, file_extension = os.path.splitext(self.bag_file)
-        out_bag_name = filename + "_verified" + file_extension
+        out_bag_name = filename + "_verified_images_only" + file_extension
         out_bag = rosbag.Bag(out_bag_name, 'w')
         while True:
             print(LINE_UP, end=LINE_CLEAR)
@@ -95,9 +96,9 @@ class RosbagPlayer:
             output_image = self.bridge.imgmsg_to_cv2(self.output_image_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
             output_mask = self.bridge.imgmsg_to_cv2(self.output_mask_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
 
-            cv2.imshow("Image", current_image_cv)
-            cv2.imshow("Output Image", output_image)
-            cv2.imshow("Output Mask", output_mask)
+            # cv2.imshow("Image", current_image_cv)
+            cv2.imshow("2 Output Image", output_image)
+            cv2.imshow("2 Output Mask", output_mask)
             key = cv2.waitKey(0)
             # key = 83
             ROIs = []
@@ -106,7 +107,7 @@ class RosbagPlayer:
             if key & 0xFF == ord('f'):
                 while True:
                     # get ROI cv2.selectROI(window_name, image_matrix, selecting_start_point)
-                    box = cv2.selectROI("Image", temp_image, fromCenter=False)
+                    box = cv2.selectROI("2 Output Image", temp_image, fromCenter=False)
                     empty = True
                     for e in box:
                         if e != 0:
@@ -118,7 +119,7 @@ class RosbagPlayer:
                     # draw a rectangle on selected ROI
                     cv2.rectangle(temp_image, (box[0], box[1]),
                                 (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 3)
-                    print('ROI is saved, press b to stop capturing, press any other key to select other ROI')
+                    print('ROI is saved, press b/right arrow/left arrowd to stop capturing, press any other key to select other ROI')
                     # if 'q' is pressed then break
                     key = cv2.waitKey(0)
                     if key & 0xFF == ord('b') or key & 0xFF == ord(key_for) or key & 0xFF == ord(key_back) or key == 27:
@@ -128,6 +129,8 @@ class RosbagPlayer:
 
                 # apply blurring
                 if not len(ROIs) == 0:
+                    output_mask = current_mask_cv.copy()
+                    output_image = current_image_cv.copy()
                     output_image = self.blurBoxes(output_image, ROIs)
                     for box in ROIs:
                         x, y, w, h = [d for d in box]
@@ -188,8 +191,7 @@ class RosbagPlayer:
         self.bag.close()
 
 if __name__ == "__main__":
-    bag_file = "/media/mihir/bb6291c1-0351-4346-9db7-611dd5f66757/home/arl/ROSBAGS/bwt_dataset/PK/3_comp_bottom_bilge_section/processed/a_2024-01-22-20-29-53_face_blurred.bag"
-    # bag_file = "/media/mihir/T7/ROSBAGs/FieldTests/JC/day1/Eagle/flights/autonomous/comp_3-4-5-home_video/a_2023-02-09-22-38-06_1.bag"
+    bag_file = "/media/mihir/T7/ROSBAGs/datasets/bwt_dataset_release/falcon/LS/day3_5_comp_with_homing/processed/a_2024-01-22-21-23-11_face_blurred_with_mask.bag"
     player = RosbagPlayer(bag_file)
     player.process()
     # player.play()
