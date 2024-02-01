@@ -16,8 +16,8 @@ class RosbagPlayer:
         self.bag_file = bag_file
         self.bag = rosbag.Bag(bag_file)
         self.bridge = CvBridge()
-        self.image_iterator = iter(self.get_messages("/blackfly_image"))
-        self.image_mask_iterator = iter(self.get_messages("/blackfly_image_mask"))
+        self.image_iterator = iter(self.get_messages("/blackfly_image/compressed"))
+        self.image_mask_iterator = iter(self.get_messages("/blackfly_image_mask/compressed"))
         self.image_buffer = []
         self.mask_buffer = []
         self.output_image_buffer = []
@@ -80,21 +80,21 @@ class RosbagPlayer:
                         self.mask_buffer.pop(0)
                     if len(self.output_image_buffer) > self.max_buffer_length:
                         out = self.output_image_buffer.pop(0)
-                        out_bag.write("/blackfly_image", out[0], out[1])
+                        out_bag.write("/blackfly_image/compressed", out[0], out[1])
                     if len(self.output_mask_buffer) > self.max_buffer_length:
                         out = self.output_mask_buffer.pop(0)
-                        out_bag.write("/blackfly_image_mask", out[0], out[1])
+                        out_bag.write("/blackfly_image_mask/compressed", out[0], out[1])
                     self.absolute_iterator_counter += 1
                 except StopIteration:
                     self.iterator_reached_end = True
             
             current_image = self.image_buffer[self.buffer_index_counter]
-            current_image_cv = self.bridge.imgmsg_to_cv2(current_image[0], desired_encoding="passthrough")
+            current_image_cv = self.bridge.compressed_imgmsg_to_cv2(current_image[0], desired_encoding="passthrough")
             current_mask = self.mask_buffer[self.buffer_index_counter]
-            current_mask_cv = self.bridge.imgmsg_to_cv2(current_mask[0], desired_encoding="passthrough")
+            current_mask_cv = self.bridge.compressed_imgmsg_to_cv2(current_mask[0], desired_encoding="passthrough")
 
-            output_image = self.bridge.imgmsg_to_cv2(self.output_image_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
-            output_mask = self.bridge.imgmsg_to_cv2(self.output_mask_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
+            output_image = self.bridge.compressed_imgmsg_to_cv2(self.output_image_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
+            output_mask = self.bridge.compressed_imgmsg_to_cv2(self.output_mask_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
 
             # cv2.imshow("Image", current_image_cv)
             cv2.imshow("2 Output Image", output_image)
@@ -128,16 +128,18 @@ class RosbagPlayer:
                 print("ROIs: ", ROIs)
 
                 # apply blurring
+                output_mask = current_mask_cv.copy()
+                output_image = current_image_cv.copy()
                 if not len(ROIs) == 0:
-                    output_mask = current_mask_cv.copy()
-                    output_image = current_image_cv.copy()
                     output_image = self.blurBoxes(output_image, ROIs)
                     for box in ROIs:
                         x, y, w, h = [d for d in box]
                         cv2.rectangle(output_mask, (box[0], box[1]),(box[0]+box[2], box[1]+box[3]), (255, 255, 255), -1)
 
-            output_image_msg = self.bridge.cv2_to_imgmsg(output_image, encoding="passthrough")
-            output_mask_msg = self.bridge.cv2_to_imgmsg(output_mask, encoding="passthrough")
+            output_image_msg = self.bridge.cv2_to_compressed_imgmsg(output_image)
+            output_image_msg.header = current_image[0].header
+            output_mask_msg = self.bridge.cv2_to_compressed_imgmsg(output_mask)
+            output_mask_msg.header = current_image[0].header
             self.output_image_buffer[self.buffer_index_counter] = (output_image_msg, self.output_image_buffer[self.buffer_index_counter][1])
             self.output_mask_buffer[self.buffer_index_counter] = (output_mask_msg, self.output_image_buffer[self.buffer_index_counter][1])
 
@@ -158,8 +160,8 @@ class RosbagPlayer:
                     self.absolute_image_counter -= 1
         
         for i in range(0, len(self.output_image_buffer)):
-            out_bag.write("/blackfly_image", self.output_image_buffer[i][0], self.output_image_buffer[i][1])
-            out_bag.write("/blackfly_image_mask", self.output_mask_buffer[i][0], self.output_mask_buffer[i][1])
+            out_bag.write("/blackfly_image/compressed", self.output_image_buffer[i][0], self.output_image_buffer[i][1])
+            out_bag.write("/blackfly_image_mask/compressed", self.output_mask_buffer[i][0], self.output_mask_buffer[i][1])
         
         out_bag.close()
             
@@ -191,7 +193,7 @@ class RosbagPlayer:
         self.bag.close()
 
 if __name__ == "__main__":
-    bag_file = "/media/mihir/T7/ROSBAGs/datasets/bwt_dataset_release/falcon/LS/day3_5_comp_with_homing/processed/a_2024-01-22-21-23-11_face_blurred_with_mask.bag"
+    bag_file = "/media/mihir/bb6291c1-0351-4346-9db7-611dd5f66757/home/arl/ROSBAGS/bwt_dataset/PK/3_comp_mh/processed/a_2024-01-22-20-36-36_face_blurred_with_mask.bag"
     player = RosbagPlayer(bag_file)
     player.process()
     # player.play()
