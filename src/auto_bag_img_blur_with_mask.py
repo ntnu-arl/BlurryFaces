@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import sys
 import yaml
 import rosbag
@@ -65,33 +63,15 @@ def getMaskImage(image, boxes):
   return masked_image
 # config_file_name = "/home/mihir/post_proc_ws/src/bag_utils/bag_processor/configs/bwt_dataset.yaml"
 
-bag_file_name = "/home/mihir/source_code/BlurryFaces/bags.csv"
-img_topic = "/cam0/cam0/compressed"
-
-topics = "/laser_mapping_path, \
-          /compslam/odometry, \
-          /msf_core/odometry, \
-          /os_cloud_node/lidar_packets, \
-          /os_cloud_node/imu_packets, \
-          /tf, \
-          /tf_static, \
-          /vectornav_node/imu, \
-          /vectornav_node/uncomp_imu, \
-          /command/current_reference"
-# Create a dictionary of topic_group_name : list of topics in that group
-# separations = {}
-
-# with open(config_file_name) as f:
-#   docs = list(yaml.load_all(f, Loader=yaml.FullLoader))
-#   for k, v in docs[0].items():
-#     separations[k] = v
+bag_file_name = "/home/nkhedekar/workspaces/BlurryFaces/bags.csv"
+img_topics = ["/blackfly_left/blackfly_left", "/blackfly_right/blackfly_right", "/zed_stereo/left/image_raw", "/zed_stereo/right/image_raw"]
 
 bag_files = []
 with open(bag_file_name, "r") as fd:
   bag_files = fd.read().splitlines()
 
 
-model_path = "/home/mihir/source_code/BlurryFaces/face_model/face.pb"
+model_path = "/home/nkhedekar/workspaces/BlurryFaces/face_model/face.pb"
 threshold = 0.2
 
 # create detection object
@@ -106,8 +86,8 @@ for bag in bag_files:
   for topic, msg, t in tqdm(in_bag.read_messages(), total=in_bag.get_message_count()):
   # for topic, msg, t in in_bag.read_messages():
     # print("Now processing: ", bag)
-    if topic == img_topic:
-      cv_image = bridge.compressed_imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    if topic in img_topics:
+      cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
       
       faces = detector.detect_objects(cv_image, threshold=threshold)
       # apply blurring
@@ -117,15 +97,19 @@ for bag in bag_files:
       # cv2.imshow('masked', mask_image)
       # key = cv2.waitKey(1)
       # bridge.cv2_to_compressed_imgmsg
-      img_msg = bridge.cv2_to_compressed_imgmsg(blur_image)
+      img_msg = bridge.cv2_to_imgmsg(blur_image)
       img_msg.header = msg.header
-      mask_img_msg = bridge.cv2_to_compressed_imgmsg(mask_image)
+      mask_img_msg = bridge.cv2_to_imgmsg(mask_image)
       mask_img_msg.header = msg.header
-      out_bag.write("/blackfly_image/compressed", img_msg, t)
-      out_bag.write("/blackfly_image_mask/compressed", mask_img_msg, t)
-    else:
-      out_bag.write(topic, msg, t)
+      out_bag.write(topic, img_msg, t)
+      out_bag.write(topic + "_mask", mask_img_msg, t)
+    # else:
+    #   out_bag.write(topic, msg, t)
     print(LINE_UP, end=LINE_CLEAR)
   out_bag.close()
 
   cv2.destroyAllWindows()
+
+
+# change to non compressed image
+# 
