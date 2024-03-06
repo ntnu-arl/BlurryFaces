@@ -86,29 +86,28 @@ for bag in bag_files:
   for topic, msg, t in tqdm(in_bag.read_messages(), total=in_bag.get_message_count()):
     if topic in img_topics:
       cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-      # print(cv_image.shape)
       grayscale = False
       if (len(cv_image.shape) == 2):
         cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
         grayscale = True
-      # print(cv_image.shape)
       
       faces = detector.detect_objects(cv_image, threshold=threshold)
       # apply blurring
-      # blur_image = cv_image.copy()
       blur_image = cv_image.copy()
       blur_image = blurBoxes(blur_image, faces)
       mask_image = getMaskImage(cv_image, faces)
-      # cv2.imshow('blured', blur_image)
-      # cv2.imshow('masked', mask_image)
-      # key = cv2.waitKey(1)
-      # bridge.cv2_to_compressed_imgmsg
+
+      if grayscale:
+        # Convert the image back to grayscale
+        blur_image = cv2.cvtColor(blur_image, cv2.COLOR_RGB2GRAY)
+
       img_msg = bridge.cv2_to_imgmsg(blur_image)
       img_msg.header = msg.header
       if grayscale:
         img_msg.encoding = "mono8"
       else:
         img_msg.encoding = "rgb8"
+
       mask_img_msg = bridge.cv2_to_imgmsg(mask_image)
       mask_img_msg.header = msg.header
       mask_img_msg.encoding = "mono8"
