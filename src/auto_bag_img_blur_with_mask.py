@@ -63,15 +63,16 @@ def getMaskImage(image, boxes):
   return masked_image
 # config_file_name = "/home/mihir/post_proc_ws/src/bag_utils/bag_processor/configs/bwt_dataset.yaml"
 
-bag_file_name = "/home/nkhedekar/workspaces/BlurryFaces/bags.csv"
-img_topics = ["/blackfly_left/blackfly_left", "/blackfly_right/blackfly_right", "/zed_stereo/left/image_raw", "/zed_stereo/right/image_raw"]
+bag_file_name = "/home/mihir/source_code/BlurryFaces/bags.csv"
+# img_topics = ["/zed_stereo/left/image_raw"]
+img_topics = ["/blackfly_left/blackfly_left", "/blackfly_right/blackfly_right"]
 
 bag_files = []
 with open(bag_file_name, "r") as fd:
   bag_files = fd.read().splitlines()
 
 
-model_path = "/home/nkhedekar/workspaces/BlurryFaces/face_model/face.pb"
+model_path = "/home/mihir/source_code/BlurryFaces/face_model/face.pb"
 threshold = 0.2
 
 # create detection object
@@ -88,10 +89,15 @@ for bag in bag_files:
     # print("Now processing: ", bag)
     if topic in img_topics:
       cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+      # print(cv_image.shape)
+      cv_image_rgb = cv2.cvtColor(cv_image,cv2.COLOR_GRAY2RGB)
+      # print(cv_image_rgb.shape)
       
-      faces = detector.detect_objects(cv_image, threshold=threshold)
+      faces = detector.detect_objects(cv_image_rgb, threshold=threshold)
       # apply blurring
-      blur_image = blurBoxes(cv_image, faces)
+      # blur_image = cv_image.copy()
+      blur_image = cv_image_rgb.copy()
+      blur_image = blurBoxes(blur_image, faces)
       mask_image = getMaskImage(cv_image, faces)
       # cv2.imshow('blured', blur_image)
       # cv2.imshow('masked', mask_image)
@@ -105,7 +111,7 @@ for bag in bag_files:
       out_bag.write(topic + "_mask", mask_img_msg, t)
     # else:
     #   out_bag.write(topic, msg, t)
-    print(LINE_UP, end=LINE_CLEAR)
+    # print(LINE_UP, end=LINE_CLEAR)
   out_bag.close()
 
   cv2.destroyAllWindows()
