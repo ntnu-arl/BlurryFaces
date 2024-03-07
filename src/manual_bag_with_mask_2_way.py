@@ -16,6 +16,7 @@ img_mask_topics = []
 for topic in img_topics:
     img_mask_topics.append(topic + "_mask")
 
+fast_forward_to_time = 1676379520.9882274
 
 class RosbagPlayer:
     def __init__(self, bag_file):
@@ -110,40 +111,45 @@ class RosbagPlayer:
             # cv2.imshow("Image", current_image_cv)
             cv2.imshow("2 Output Image", output_image)
             cv2.imshow("2 Output Mask", output_mask)
-            key = cv2.waitKey(0)
-            # key = 83
-            ROIs = []
-            temp_image = current_image_cv.copy()
-            # keep getting ROIs until pressing 'q'
-            if key & 0xFF == ord('f'):
-                while True:
-                    # get ROI cv2.selectROI(window_name, image_matrix, selecting_start_point)
-                    box = cv2.selectROI("2 Output Image", temp_image, fromCenter=False)
-                    empty = True
-                    for e in box:
-                        if e != 0:
-                            empty = False
-                    if empty:
-                        break
-                    # add selected box to box list
-                    ROIs.append(box)
-                    # draw a rectangle on selected ROI
-                    cv2.rectangle(temp_image, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 3)
-                    print('ROI is saved, press b/right arrow/left arrowd to stop capturing, press any other key to select other ROI')
-                    # if 'q' is pressed then break
+            if (fast_forward_to_time > 0):
+                # This part is ignored till the time is reached
+                if latest_image_time > fast_forward_to_time:
                     key = cv2.waitKey(0)
-                    if key & 0xFF == ord('b') or key & 0xFF == ord(key_for) or key & 0xFF == ord(key_back) or key == 27:
-                        break
-                    
-                print("ROIs: ", ROIs)
+                    # key = 83
+                    ROIs = []
+                    temp_image = current_image_cv.copy()
+                    # keep getting ROIs until pressing 'q'
+                    if key & 0xFF == ord('f'):
+                        while True:
+                            # get ROI cv2.selectROI(window_name, image_matrix, selecting_start_point)
+                            box = cv2.selectROI("2 Output Image", temp_image, fromCenter=False)
+                            empty = True
+                            for e in box:
+                                if e != 0:
+                                    empty = False
+                            if empty:
+                                break
+                            # add selected box to box list
+                            ROIs.append(box)
+                            # draw a rectangle on selected ROI
+                            cv2.rectangle(temp_image, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 3)
+                            print('ROI is saved, press b/right arrow/left arrowd to stop capturing, press any other key to select other ROI')
+                            # if 'q' is pressed then break
+                            key = cv2.waitKey(0)
+                            if key & 0xFF == ord('b') or key & 0xFF == ord(key_for) or key & 0xFF == ord(key_back) or key == 27:
+                                break
+                            
+                        print("ROIs: ", ROIs)
 
-                # apply blurring
-                output_image = current_image_cv.copy()
-                output_mask = current_mask_cv.copy()
-                if not len(ROIs) == 0:
-                    output_image = self.blurBoxes(output_image, ROIs)
-                    for box in ROIs:
-                        cv2.rectangle(output_mask, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]), (255, 255, 255), -1)
+                        # apply blurring
+                        output_image = current_image_cv.copy()
+                        output_mask = current_mask_cv.copy()
+                        if not len(ROIs) == 0:
+                            output_image = self.blurBoxes(output_image, ROIs)
+                            for box in ROIs:
+                                cv2.rectangle(output_mask, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]), (255, 255, 255), -1)
+                else:
+                    key = ord(key_for)
 
             # Color images need to be converted with rgb8 encoding
             if len(output_image.shape) == 3:
