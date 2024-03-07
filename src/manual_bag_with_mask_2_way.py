@@ -9,17 +9,22 @@ key_for = 'd'
 key_back = 'a'
 LINE_UP = '\033[1A'
 LINE_CLEAR = '\x1b[2K'
-MAX_BUFFER = 20
+MAX_BUFFER = 40
+
+img_topics = ["/blackfly_left/blackfly_left", "/blackfly_right/blackfly_right", "/zed_stereo/left/image_raw", "/zed_stereo/right/image_raw"]
+img_mask_topics = []
+for topic in img_topics:
+    img_mask_topics.append(topic + "_mask")
+
 
 class RosbagPlayer:
     def __init__(self, bag_file):
         self.bag_file = bag_file
         self.bag = rosbag.Bag(bag_file)
+        self.bag_end_time = self.bag.get_end_time()
         self.bridge = CvBridge()
-        self.image_iterator = iter(self.get_messages("/blackfly_image/compressed"))
-        self.image_mask_iterator = iter(self.get_messages("/blackfly_image_mask/compressed"))
-        # self.image_iterator = iter(self.get_messages("/blackfly_image"))
-        # self.image_mask_iterator = iter(self.get_messages("/blackfly_image_mask"))
+        self.image_iterator = iter(self.get_messages(img_topics))
+        self.image_mask_iterator = iter(self.get_messages(img_mask_topics))
         self.image_buffer = []
         self.mask_buffer = []
         self.output_image_buffer = []
@@ -30,9 +35,9 @@ class RosbagPlayer:
         self.buffer_index_counter = 0
         self.iterator_reached_end = False
 
-    def get_messages(self, topic):
-        for _, msg, t in self.bag.read_messages(topics=[topic]):
-            yield (msg,t)
+    def get_messages(self, topics):
+        for topic, msg, t in self.bag.read_messages(topics):
+            yield (msg, t, topic)
     
     def blurBoxes(self, image, boxes):
         """
@@ -63,48 +68,44 @@ class RosbagPlayer:
         filename, file_extension = os.path.splitext(self.bag_file)
         out_bag_name = filename + "_verified_images_only" + file_extension
         out_bag = rosbag.Bag(out_bag_name, 'w')
+        latest_image_time = self.bag.get_start_time()
         while True:
             print(LINE_UP, end=LINE_CLEAR)
-            print("img:", self.absolute_image_counter, "| iter:", self.absolute_iterator_counter, "| buffer:", self.buffer_index_counter)
+            print("img:", self.absolute_image_counter, "| iter:", self.absolute_iterator_counter, "| buffer:", self.buffer_index_counter, "| time:", latest_image_time, "/", self.bag_end_time)
             if self.absolute_iterator_counter < self.absolute_image_counter:
                 try:
                     image = next(self.image_iterator)
                     mask_image = next(self.image_mask_iterator)
+
+                    latest_image_time = image[1].to_sec()
+
                     self.image_buffer.append(image)
                     self.mask_buffer.append(mask_image)
                     image_copy = copy.deepcopy(image)
                     mask_copy = copy.deepcopy(mask_image)
                     self.output_image_buffer.append(image_copy)
                     self.output_mask_buffer.append(mask_copy)
-                    # out_image = self.bridge.cv2_to_compressed_imgmsg(self.bridge.imgmsg_to_cv2(image_copy[0], desired_encoding="passthrough"))
-                    # out_mask = self.bridge.cv2_to_compressed_imgmsg(self.bridge.imgmsg_to_cv2(mask_copy[0], desired_encoding="passthrough"))
-                    # self.output_image_buffer.append((out_image, image_copy[1]))
-                    # self.output_mask_buffer.append((out_mask, mask_copy[1]))
                     if len(self.image_buffer) > self.max_buffer_length:
                         self.image_buffer.pop(0)
                     if len(self.mask_buffer) > self.max_buffer_length:
                         self.mask_buffer.pop(0)
                     if len(self.output_image_buffer) > self.max_buffer_length:
                         out = self.output_image_buffer.pop(0)
-                        out_bag.write("/blackfly_image/compressed", out[0], out[1])
+                        out_bag.write(out[2], out[0], out[1])
                     if len(self.output_mask_buffer) > self.max_buffer_length:
                         out = self.output_mask_buffer.pop(0)
-                        out_bag.write("/blackfly_image_mask/compressed", out[0], out[1])
+                        out_bag.write(out[2], out[0], out[1])
                     self.absolute_iterator_counter += 1
                 except StopIteration:
                     self.iterator_reached_end = True
-            
-            current_image = self.image_buffer[self.buffer_index_counter]
-            current_image_cv = self.bridge.compressed_imgmsg_to_cv2(current_image[0], desired_encoding="passthrough")
-            current_mask = self.mask_buffer[self.buffer_index_counter]
-            current_mask_cv = self.bridge.compressed_imgmsg_to_cv2(current_mask[0], desired_encoding="passthrough")
-            # current_image = self.image_buffer[self.buffer_index_counter]
-            # current_image_cv = self.bridge.imgmsg_to_cv2(current_image[0], desired_encoding="passthrough")
-            # current_mask = self.mask_buffer[self.buffer_index_counter]
-            # current_mask_cv = self.bridge.imgmsg_to_cv2(current_mask[0], desired_encoding="passthrough")
 
-            output_image = self.bridge.compressed_imgmsg_to_cv2(self.output_image_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
-            output_mask = self.bridge.compressed_imgmsg_to_cv2(self.output_mask_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
+            current_image = self.image_buffer[self.buffer_index_counter]
+            current_image_cv = self.bridge.imgmsg_to_cv2(current_image[0], desired_encoding="passthrough")
+            current_mask = self.mask_buffer[self.buffer_index_counter]
+            current_mask_cv = self.bridge.imgmsg_to_cv2(current_mask[0], desired_encoding="passthrough")
+
+            output_image = self.bridge.imgmsg_to_cv2(self.output_image_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
+            output_mask = self.bridge.imgmsg_to_cv2(self.output_mask_buffer[self.buffer_index_counter][0], desired_encoding="passthrough").copy()
 
             # cv2.imshow("Image", current_image_cv)
             cv2.imshow("2 Output Image", output_image)
@@ -127,8 +128,7 @@ class RosbagPlayer:
                     # add selected box to box list
                     ROIs.append(box)
                     # draw a rectangle on selected ROI
-                    cv2.rectangle(temp_image, (box[0], box[1]),
-                                (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 3)
+                    cv2.rectangle(temp_image, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), (0, 255, 0), 3)
                     print('ROI is saved, press b/right arrow/left arrowd to stop capturing, press any other key to select other ROI')
                     # if 'q' is pressed then break
                     key = cv2.waitKey(0)
@@ -138,44 +138,46 @@ class RosbagPlayer:
                 print("ROIs: ", ROIs)
 
                 # apply blurring
-                output_mask = current_mask_cv.copy()
                 output_image = current_image_cv.copy()
+                output_mask = current_mask_cv.copy()
                 if not len(ROIs) == 0:
                     output_image = self.blurBoxes(output_image, ROIs)
                     for box in ROIs:
-                        cv2.rectangle(output_mask, (box[0], box[1]),(box[0]+box[2], box[1]+box[3]), (255, 255, 255), -1)
+                        cv2.rectangle(output_mask, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]), (255, 255, 255), -1)
 
-            output_image_msg = self.bridge.cv2_to_compressed_imgmsg(output_image)
+            # Color images need to be converted with rgb8 encoding
+            if len(output_image.shape) == 3:
+                # RGB imag
+                output_image_msg = self.bridge.cv2_to_imgmsg(output_image, encoding="rgb8")
+            else:
+                output_image_msg = self.bridge.cv2_to_imgmsg(output_image, encoding="passthrough")
             output_image_msg.header = current_image[0].header
-            output_mask_msg = self.bridge.cv2_to_compressed_imgmsg(output_mask)
+            output_mask_msg = self.bridge.cv2_to_imgmsg(output_mask)
             output_mask_msg.header = current_image[0].header
-            self.output_image_buffer[self.buffer_index_counter] = (output_image_msg, self.output_image_buffer[self.buffer_index_counter][1])
-            self.output_mask_buffer[self.buffer_index_counter] = (output_mask_msg, self.output_image_buffer[self.buffer_index_counter][1])
+            self.output_image_buffer[self.buffer_index_counter] = (output_image_msg, self.output_image_buffer[self.buffer_index_counter][1], self.output_image_buffer[self.buffer_index_counter][2])
+            self.output_mask_buffer[self.buffer_index_counter] = (output_mask_msg, self.output_mask_buffer[self.buffer_index_counter][1], self.output_mask_buffer[self.buffer_index_counter][2])
 
             if key == 27:  # Press ESC to exit
                 break
-            elif key & 0xFF == ord(key_for): 
+            elif key & 0xFF == ord(key_for):
                 self.absolute_image_counter += 1
                 self.buffer_index_counter += 1
                 if self.buffer_index_counter >= self.max_buffer_length:
                     self.buffer_index_counter = self.max_buffer_length - 1
                 if self.buffer_index_counter == self.max_buffer_length - 1 and self.iterator_reached_end:
                     break
-            elif key & 0xFF == ord(key_back): 
+            elif key & 0xFF == ord(key_back):
                 self.buffer_index_counter -= 1
                 if self.buffer_index_counter < 0:
                     self.buffer_index_counter = 0
                 else:
                     self.absolute_image_counter -= 1
-        
+
         for i in range(0, len(self.output_image_buffer)):
-            out_bag.write("/blackfly_image/compressed", self.output_image_buffer[i][0], self.output_image_buffer[i][1])
-            out_bag.write("/blackfly_image_mask/compressed", self.output_mask_buffer[i][0], self.output_mask_buffer[i][1])
-        
+            out_bag.write(self.output_image_buffer[i][2], self.output_image_buffer[i][0], self.output_image_buffer[i][1])
+            out_bag.write(self.output_mask_buffer[i][2], self.output_mask_buffer[i][0], self.output_mask_buffer[i][1])
         out_bag.close()
-            
-            
-    
+
     def play(self):
         for image_msg, image_mask_msg in zip(self.image_iterator, self.image_mask_iterator):
             image = self.bridge.imgmsg_to_cv2(image_msg, desired_encoding="passthrough")
@@ -201,8 +203,9 @@ class RosbagPlayer:
         cv2.destroyAllWindows()
         self.bag.close()
 
+
 if __name__ == "__main__":
-    bag_file = "/media/mihir/bb6291c1-0351-4346-9db7-611dd5f66757/home/arl/ROSBAGS/bwt_dataset/PK/3_comp_bottom_bilge_section/processed/a_2024-01-22-20-29-53_face_blurred_with_mask_verified_images_only.bag"
+    bag_file = "/media/nkhedekar/Extreme Pro/2023_02_13_Johan_Castberg/2023_02_14/mjolnir/processed/tmp.bag"
     player = RosbagPlayer(bag_file)
     player.process()
     # player.play()
