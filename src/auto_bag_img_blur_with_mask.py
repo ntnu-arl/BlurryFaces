@@ -78,6 +78,7 @@ threshold = 0.2
 detector = Detector(model_path=model_path, name="detection")
 
 for bag in bag_files:
+  print("opening bag: ", bag)
   in_bag = rosbag.Bag(bag)
   print("Now processing: ", bag)
   filename, file_extension = os.path.splitext(bag)
